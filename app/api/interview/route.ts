@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const systemPrompt = `You are an expert technical interviewer conducting a mock interview for a ${targetRole} position. Your role is to:
 
@@ -55,29 +55,41 @@ Format your final feedback clearly with headers.`;
     // Convert message history for Gemini
     const history: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     
-    for (const msg of messages) {
-      let text = "";
-      if (msg.text) {
-        text = msg.text;
-      } else if (msg.parts && Array.isArray(msg.parts)) {
-        text = msg.parts
-          .filter((p: any) => p.type === "text" && p.text)
-          .map((p: any) => p.text)
-          .join("");
-      }
-      
-      if (text) {
-        history.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text }],
-        });
+    // Add system message as first user message if this is the start of conversation
+    if (messages.length === 0 || (messages.length === 1 && messages[0].role === "user")) {
+      history.push({
+        role: "user",
+        parts: [{ text: systemPrompt }],
+      });
+      history.push({
+        role: "model",
+        parts: [{ text: "I understand. I'm ready to conduct this mock interview." }],
+      });
+    } else {
+      // For subsequent messages, add history without system instruction
+      for (const msg of messages) {
+        let text = "";
+        if (msg.text) {
+          text = msg.text;
+        } else if (msg.parts && Array.isArray(msg.parts)) {
+          text = msg.parts
+            .filter((p: any) => p.type === "text" && p.text)
+            .map((p: any) => p.text)
+            .join("");
+        }
+        
+        if (text) {
+          history.push({
+            role: msg.role === "user" ? "user" : "model",
+            parts: [{ text }],
+          });
+        }
       }
     }
 
     // Start chat session
     const chat = model.startChat({
       history: history.slice(0, -1), // Exclude the last user message
-      systemInstruction: systemPrompt,
     });
 
     // Get the last user message
@@ -96,7 +108,6 @@ Format your final feedback clearly with headers.`;
     const responseText = response.text();
 
     // Create SSE response
-    const encoder = new TextEncoder();
     let sseContent = "";
 
     // Format as SSE with the response
