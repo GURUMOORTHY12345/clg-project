@@ -1,26 +1,74 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Target, Clock, FileSearch, Eye } from "lucide-react";
+import { Target, Clock, FileSearch, Eye, Trash2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import type { SkillAnalysisRecord } from "@/lib/types";
 
-export default async function HistoryPage() {
-  const supabase = await createClient();
+interface LocalHistoryItem {
+  id: string;
+  role: string;
+  score: number;
+  date: string;
+}
 
-  const { data: analyses } = await supabase
-    .from("skill_analyses")
-    .select("*")
-    .order("created_at", { ascending: false });
+export default function HistoryPage() {
+  const [analyses, setAnalyses] = useState<SkillAnalysisRecord[]>([]);
+  const [localHistory, setLocalHistory] = useState<LocalHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const allAnalyses = (analyses || []) as SkillAnalysisRecord[];
+  useEffect(() => {
+    fetchSupabaseHistory();
+    loadLocalHistory();
+  }, []);
+
+  const fetchSupabaseHistory = async () => {
+    const supabase = await createClient();
+    const { data: analysisData } = await supabase
+      .from("skill_analyses")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    setAnalyses((analysisData || []) as SkillAnalysisRecord[]);
+    setLoading(false);
+  };
+
+  const loadLocalHistory = () => {
+    try {
+      const stored = localStorage.getItem("skillGapHistory");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setLocalHistory(parsed || []);
+      }
+    } catch (error) {
+      console.error("Failed to load local history:", error);
+    }
+  };
+
+  const deleteLocalHistoryItem = (id: string) => {
+    const updated = localHistory.filter((item) => item.id !== id);
+    setLocalHistory(updated);
+    localStorage.setItem("skillGapHistory", JSON.stringify(updated));
+  };
+
+  const clearAllLocalHistory = () => {
+    if (confirm("Are you sure you want to delete all local history?")) {
+      setLocalHistory([]);
+      localStorage.removeItem("skillGapHistory");
+    }
+  };
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-accent/10 text-accent border-accent/20";
     if (score >= 60) return "bg-chart-4/10 text-chart-4 border-chart-4/20";
     return "bg-destructive/10 text-destructive border-destructive/20";
   };
+
+  const allHistoryEmpty = analyses.length === 0 && localHistory.length === 0;
 
   return (
     <div className="space-y-6">
@@ -36,62 +84,7 @@ export default async function HistoryPage() {
         </Button>
       </div>
 
-      {allAnalyses.length > 0 ? (
-        <div className="grid gap-4">
-          {allAnalyses.map((analysis) => (
-            <Card key={analysis.id}>
-              <CardContent className="flex items-center justify-between p-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Target className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">
-                      {analysis.target_role}
-                    </h3>
-                    <div className="mt-1 flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        {new Date(analysis.created_at).toLocaleDateString(
-                          "en-US",
-                          {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          }
-                        )}
-                      </span>
-                      <span>
-                        {analysis.analysis_result?.skillGaps?.length || 0} skill gaps
-                        identified
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <Badge
-                      variant="outline"
-                      className={getScoreColor(
-                        analysis.analysis_result?.overallScore || 0
-                      )}
-                    >
-                      {analysis.analysis_result?.overallScore || 0}% Ready
-                    </Badge>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/history/${analysis.id}`}>
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Details
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
+      {allHistoryEmpty ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileSearch className="h-12 w-12 text-muted-foreground/50" />
@@ -106,6 +99,135 @@ export default async function HistoryPage() {
             </Button>
           </CardContent>
         </Card>
+      ) : (
+        <div className="space-y-6">
+          {/* Supabase History */}
+          {analyses.length > 0 && (
+            <div>
+              <h2 className="mb-4 text-lg font-semibold text-foreground">
+                Saved Analyses
+              </h2>
+              <div className="grid gap-4">
+                {analyses.map((analysis) => (
+                  <Card key={analysis.id}>
+                    <CardContent className="flex items-center justify-between p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                          <Target className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground">
+                            {analysis.target_role}
+                          </h3>
+                          <div className="mt-1 flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5" />
+                              {new Date(analysis.created_at).toLocaleDateString(
+                                "en-US",
+                                {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                }
+                              )}
+                            </span>
+                            <span>
+                              {analysis.analysis_result?.skillGaps?.length || 0} skill gaps
+                              identified
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <Badge
+                            variant="outline"
+                            className={getScoreColor(
+                              analysis.analysis_result?.overallScore || 0
+                            )}
+                          >
+                            {analysis.analysis_result?.overallScore || 0}% Ready
+                          </Badge>
+                        </div>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/dashboard/history/${analysis.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Local History */}
+          {localHistory.length > 0 && (
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Recent Quick Analyses
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllLocalHistory}
+                  className="text-destructive hover:text-destructive"
+                >
+                  Clear All
+                </Button>
+              </div>
+              <div className="grid gap-4">
+                {localHistory.map((item) => (
+                  <Card key={item.id}>
+                    <CardContent className="flex items-center justify-between p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                          <Target className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground">
+                            {item.role}
+                          </h3>
+                          <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5" />
+                            {new Date(item.date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <Badge
+                            variant="outline"
+                            className={getScoreColor(item.score)}
+                          >
+                            {item.score}% Ready
+                          </Badge>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteLocalHistoryItem(item.id)}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

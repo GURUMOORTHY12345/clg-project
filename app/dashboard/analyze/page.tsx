@@ -44,67 +44,45 @@ export default function AnalyzePage() {
         throw new Error("Failed to analyze resume");
       }
 
-      // Parse SSE stream manually
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
+      // Parse JSON response
+      const analysisData = (await response.json()) as SkillAnalysis;
+      
+      if (analysisData.overallScore !== undefined) {
+        setAnalysis(analysisData);
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let partialObject = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data:")) {
-            const data = trimmed.slice(5).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.type === "object" && parsed.object) {
-                partialObject = JSON.stringify(parsed.object);
-                // Try to parse as complete analysis
-                try {
-                  const analysisData = parsed.object as SkillAnalysis;
-                  if (analysisData.overallScore !== undefined) {
-                    setAnalysis(analysisData);
-                  }
-                } catch {
-                  // Still streaming
-                }
-              }
-            } catch {
-              // Skip invalid JSON
-            }
-          }
-        }
-      }
-
-      // Final parse attempt
-      if (partialObject) {
+        // Save to localStorage
         try {
-          const finalAnalysis = JSON.parse(partialObject) as SkillAnalysis;
-          setAnalysis(finalAnalysis);
+          const historyItem = {
+            id: Date.now().toString(),
+            role: targetRole as string,
+            score: analysisData.overallScore,
+            date: new Date().toISOString(),
+          };
 
-          // Save the analysis
-          await fetch("/api/analyze/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              targetRole,
-              resumeText,
-              analysis: finalAnalysis,
-            }),
-          });
+          const existing = localStorage.getItem("skillGapHistory");
+          const history = existing ? JSON.parse(existing) : [];
+          history.unshift(historyItem);
+          // Keep only last 50 items
+          if (history.length > 50) {
+            history.pop();
+          }
+          localStorage.setItem("skillGapHistory", JSON.stringify(history));
         } catch {
-          // Use whatever we got
+          console.error("Failed to save to localStorage");
         }
+
+        // Also save to database
+        await fetch("/api/analyze/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetRole,
+            resumeText,
+            analysis: analysisData,
+          }),
+        });
+      } else {
+        throw new Error("Invalid response format");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");

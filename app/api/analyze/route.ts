@@ -1,15 +1,6 @@
-import { streamText, Output } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@/lib/supabase/server";
-
-// Use custom OpenAI API key if provided, otherwise use AI Gateway
-function getModel() {
-  if (process.env.OPENAI_API_KEY) {
-    return openai("gpt-4o-mini");
-  }
-  return "openai/gpt-4o-mini";
-}
 
 const skillAnalysisSchema = z.object({
   overallScore: z.number().min(0).max(100),
@@ -83,32 +74,74 @@ export async function POST(req: Request) {
     return new Response("Missing resume text or target role", { status: 400 });
   }
 
-  const result = streamText({
-    model: getModel(),
-    output: Output.object({ schema: skillAnalysisSchema }),
-    prompt: `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
+  if (!process.env.GEMINI_API_KEY) {
+    return new Response("GEMINI_API_KEY not configured", { status: 500 });
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+    const prompt = `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
 
 RESUME:
 ${resumeText}
 
 TARGET ROLE: ${targetRole}
 
-Provide a comprehensive skill gap analysis including:
-1. Overall readiness score (0-100)
-2. Current skills extracted from the resume with their levels
-3. Required skills for the ${targetRole} role with importance levels
-4. Specific skill gaps with priorities and recommendations
-5. A structured learning path with phases, durations, and specific resources (use real course names and URLs when possible)
-6. Key strengths to highlight in interviews
-7. Areas that need improvement
-8. Important interview topics with preparation tips
-9. A brief summary of the analysis
+Provide a comprehensive skill gap analysis as a JSON object with these fields:
+{
+  "overallScore": number 0-100,
+  "currentSkills": [{"name": string, "level": "beginner"|"intermediate"|"advanced", "yearsOfExperience": number|null}],
+  "requiredSkills": [{"name": string, "importance": "critical"|"important"|"nice-to-have", "currentLevel": "none"|"beginner"|"intermediate"|"advanced", "targetLevel": "beginner"|"intermediate"|"advanced"}],
+  "skillGaps": [{"skill": string, "gap": "large"|"medium"|"small", "priority": number 1-10, "recommendation": string}],
+  "learningPath": [{"phase": number, "title": string, "duration": string, "skills": string[], "resources": [{"type": "course"|"tutorial"|"documentation"|"project", "name": string, "url": string|null, "estimatedTime": string}]}],
+  "strengths": string[],
+  "areasForImprovement": string[],
+  "interviewTopics": [{"topic": string, "importance": "high"|"medium"|"low", "preparationTips": string[]}],
+  "summary": string
+}
 
-Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates.`,
-  });
+Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates. Return ONLY valid JSON, no additional text.`;
 
-  const response = result.toUIMessageStreamResponse();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-  // We'll save the analysis after streaming completes in the client
-  return response;
+    // Parse the JSON response
+    let analysisData: SkillAnalysis;
+    try {
+      // Extract JSON from response (in case there's extra text)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON found in response");
+      }
+      analysisData = JSON.parse(jsonMatch[0]);
+      
+      // Validate with schema
+      const validated = skillAnalysisSchema.parse(analysisData);
+      
+      return new Response(JSON.stringify(validated), {
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (parseError) {
+      console.error("Failed to parse Gemini response:", text);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to parse AI response",
+          details: parseError instanceof Error ? parseError.message : "Unknown error",
+        }),
+        { status: 400 }
+      );
+    }
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    return new Response(
+      JSON.stringify({
+        error: "Analysis failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      }),
+      { status: 500 }
+    );
+  }
 }

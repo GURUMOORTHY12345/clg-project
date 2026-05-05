@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { RoleSelector } from "@/components/analyzer/role-selector";
 import type { TargetRole } from "@/lib/types";
+import { streamInterviewResponse } from "@/lib/interview-client";
 import {
   MessageSquare,
   Send,
@@ -21,30 +20,19 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function getUIMessageText(msg: { parts?: Array<{ type: string; text?: string }> }): string {
-  if (!msg.parts || !Array.isArray(msg.parts)) return "";
-  return msg.parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
+interface Message {
+  role: "user" | "assistant";
+  text: string;
+  id?: string;
 }
 
 export default function InterviewPage() {
   const [targetRole, setTargetRole] = useState<TargetRole | "">("");
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/interview",
-      body: { targetRole },
-    }),
-  });
-
-  const isStreaming = status === "streaming";
-  const isSubmitted = status === "submitted";
-  const isLoading = isStreaming || isSubmitted;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,18 +41,91 @@ export default function InterviewPage() {
   const startInterview = async () => {
     if (!targetRole) return;
     setInterviewStarted(true);
-    await sendMessage({
+    setIsLoading(true);
+    
+    const userMessage: Message = {
+      role: "user",
       text: `Hello! I'm ready for my mock interview for the ${targetRole} position.`,
-    });
+      id: Date.now().toString(),
+    };
+    
+    setMessages([userMessage]);
+
+    try {
+      let assistantResponse = "";
+      
+      for await (const chunk of streamInterviewResponse(
+        targetRole,
+        [userMessage]
+      )) {
+        assistantResponse += chunk;
+      }
+
+      if (assistantResponse) {
+        const assistantMessage: Message = {
+          role: "assistant",
+          text: assistantResponse,
+          id: (Date.now() + 1).toString(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+    } catch (error) {
+      console.error("Interview error:", error);
+      const errorMessage: Message = {
+        role: "assistant",
+        text: "I encountered an error. Please try again.",
+        id: (Date.now() + 1).toString(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
-    const text = inputValue;
+    const userMessage: Message = {
+      role: "user",
+      text: inputValue,
+      id: Date.now().toString(),
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputValue("");
-    await sendMessage({ text });
+    setIsLoading(true);
+
+    try {
+      let assistantResponse = "";
+      
+      for await (const chunk of streamInterviewResponse(
+        targetRole,
+        updatedMessages
+      )) {
+        assistantResponse += chunk;
+      }
+
+      if (assistantResponse) {
+        const assistantMessage: Message = {
+          role: "assistant",
+          text: assistantResponse,
+          id: (Date.now() + 1).toString(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+    } catch (error) {
+      console.error("Interview error:", error);
+      const errorMessage: Message = {
+        role: "assistant",
+        text: "I encountered an error. Please try again.",
+        id: (Date.now() + 1).toString(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const resetInterview = () => {
@@ -144,7 +205,6 @@ export default function InterviewPage() {
               <div className="space-y-4">
                 {messages.map((message) => {
                   const isUser = message.role === "user";
-                  const text = getUIMessageText(message);
 
                   return (
                     <div
@@ -174,7 +234,7 @@ export default function InterviewPage() {
                             : "bg-muted text-foreground"
                         )}
                       >
-                        <p className="whitespace-pre-wrap text-sm">{text}</p>
+                        <p className="whitespace-pre-wrap text-sm">{message.text}</p>
                       </div>
                     </div>
                   );
