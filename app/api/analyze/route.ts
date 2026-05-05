@@ -145,10 +145,48 @@ Provide a comprehensive skill gap analysis as a JSON object with these fields:
 
 Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates. Return ONLY valid JSON, no additional text.`;
 
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-      });
+      let result;
+      let lastError: any;
+      const maxRetries = 3;
+      
+      // Try gemini-2.5-flash first, fall back to gemini-1.5-pro if unavailable
+      const models = ["gemini-2.5-flash", "gemini-1.5-pro"];
+      
+      for (const model of models) {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            console.log(`[v0] Attempting ${model} (attempt ${attempt + 1}/${maxRetries})`);
+            result = await ai.models.generateContent({
+              model: model,
+              contents: prompt,
+            });
+            console.log(`[v0] Successfully got response from ${model}`);
+            break;
+          } catch (error: any) {
+            lastError = error;
+            console.error(`[v0] ${model} attempt ${attempt + 1} failed:`, error?.message);
+            
+            // If it's a 503 (service unavailable), try next model or retry
+            if (error?.status === 503 && attempt < maxRetries - 1) {
+              // Wait before retry with exponential backoff
+              await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+              continue;
+            } else if (error?.status === 503 && model === models[0]) {
+              // Move to next model if gemini-2.5-flash fails
+              console.log(`[v0] ${model} unavailable, trying ${models[1]}`);
+              break;
+            } else {
+              throw error;
+            }
+          }
+        }
+        
+        if (result) break;
+      }
+      
+      if (!result) {
+        throw lastError || new Error("Failed to get response from Gemini API");
+      }
       
       const text = result.text?.trim() ?? "";
 

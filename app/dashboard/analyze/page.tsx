@@ -41,7 +41,21 @@ export default function AnalyzePage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to analyze resume");
+        let errorMessage = "Failed to analyze resume";
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          if (response.status === 503) {
+            errorMessage = "AI service is currently busy. Please try again in a moment.";
+          } else {
+            errorMessage = `Error: ${response.statusText}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       // Parse JSON response
