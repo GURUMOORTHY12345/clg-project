@@ -17,16 +17,32 @@ export async function* streamInterviewResponse(
     });
 
     if (!response.ok) {
-      throw new Error("Failed to get interview response");
+      const contentType = response.headers.get("content-type");
+      let errorMessage = "Failed to get interview response";
+
+      if (contentType?.includes("application/json")) {
+        try {
+          const errorBody = await response.json();
+          errorMessage = errorBody.error || errorMessage;
+        } catch {
+          // Fallback to status text
+          errorMessage = response.statusText || errorMessage;
+        }
+      } else {
+        errorMessage = response.statusText || errorMessage;
+      }
+
+      throw new Error(`${response.status}: ${errorMessage}`);
     }
 
     if (!response.body) {
-      throw new Error("No response body");
+      throw new Error("No response body from server");
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let hasError = false;
 
     try {
       while (true) {
@@ -47,11 +63,24 @@ export async function* streamInterviewResponse(
 
             try {
               const parsed = JSON.parse(data);
+
+              // Handle error response
+              if (parsed.type === "error") {
+                hasError = true;
+                throw new Error(
+                  `${parsed.code}: ${parsed.error}`
+                );
+              }
+
+              // Yield text response
               if (parsed.text) {
                 yield parsed.text;
               }
-            } catch {
-              // Skip invalid JSON
+            } catch (parseErr) {
+              if (!hasError) {
+                console.error("Failed to parse SSE data:", parseErr);
+              }
+              // Continue processing other lines
             }
           }
         }

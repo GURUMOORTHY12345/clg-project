@@ -58,31 +58,73 @@ const skillAnalysisSchema = z.object({
 export type SkillAnalysis = z.infer<typeof skillAnalysisSchema>;
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const { resumeText, targetRole } = await req.json();
-
-  if (!resumeText || !targetRole) {
-    return new Response("Missing resume text or target role", { status: 400 });
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    return new Response("GEMINI_API_KEY not configured", { status: 500 });
-  }
-
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const prompt = `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", code: "AUTH_REQUIRED" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate request body
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid JSON in request body",
+          code: "INVALID_JSON",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const { resumeText, targetRole } = body;
+
+    // Validate required fields
+    if (!resumeText?.trim()) {
+      return new Response(
+        JSON.stringify({
+          error: "Resume text is required and cannot be empty",
+          code: "MISSING_RESUME",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!targetRole?.trim()) {
+      return new Response(
+        JSON.stringify({
+          error: "Target role is required and cannot be empty",
+          code: "MISSING_TARGET_ROLE",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate API key
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY environment variable not configured");
+      return new Response(
+        JSON.stringify({
+          error: "Server configuration error",
+          code: "API_KEY_MISSING",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      const prompt = `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
 
 RESUME:
 ${resumeText}
@@ -104,44 +146,94 @@ Provide a comprehensive skill gap analysis as a JSON object with these fields:
 
 Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates. Return ONLY valid JSON, no additional text.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
 
-    // Parse the JSON response
-    let analysisData: SkillAnalysis;
-    try {
-      // Extract JSON from response (in case there's extra text)
+      if (!text) {
+        return new Response(
+          JSON.stringify({
+            error: "Empty response from AI service",
+            code: "EMPTY_RESPONSE",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Extract JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error("No JSON found in response");
+        console.error("No JSON found in Gemini response:", text);
+        return new Response(
+          JSON.stringify({
+            error: "AI response format invalid",
+            code: "INVALID_RESPONSE_FORMAT",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
       }
-      analysisData = JSON.parse(jsonMatch[0]);
-      
-      // Validate with schema
-      const validated = skillAnalysisSchema.parse(analysisData);
-      
-      return new Response(JSON.stringify(validated), {
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", text);
+
+      // Parse and validate JSON
+      let analysisData: SkillAnalysis;
+      try {
+        analysisData = JSON.parse(jsonMatch[0]);
+      } catch (parseErr) {
+        console.error("Failed to parse JSON:", parseErr);
+        return new Response(
+          JSON.stringify({
+            error: "Failed to parse AI response as JSON",
+            code: "JSON_PARSE_ERROR",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Validate against schema
+      try {
+        const validated = skillAnalysisSchema.parse(analysisData);
+        return new Response(JSON.stringify(validated), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (validationErr) {
+        console.error("Schema validation failed:", validationErr);
+        return new Response(
+          JSON.stringify({
+            error: "AI response failed validation",
+            code: "VALIDATION_ERROR",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    } catch (geminiError: any) {
+      console.error("Gemini API error:", geminiError);
+
+      // Handle specific Gemini API errors
+      const statusCode =
+        geminiError?.status === 404 ? 500 : geminiError?.status || 500;
+      const errorMessage =
+        geminiError?.message || "AI service request failed";
+      const errorCode =
+        geminiError?.status === 404
+          ? "MODEL_NOT_AVAILABLE"
+          : "AI_SERVICE_ERROR";
+
       return new Response(
         JSON.stringify({
-          error: "Failed to parse AI response",
-          details: parseError instanceof Error ? parseError.message : "Unknown error",
+          error: errorMessage,
+          code: errorCode,
         }),
-        { status: 400 }
+        { status: statusCode, headers: { "Content-Type": "application/json" } }
       );
     }
-  } catch (error) {
-    console.error("Gemini API error:", error);
+  } catch (err) {
+    console.error("Unexpected error in analyze route:", err);
     return new Response(
       JSON.stringify({
-        error: "Analysis failed",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Internal server error",
+        code: "INTERNAL_ERROR",
       }),
-      { status: 500 }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }
