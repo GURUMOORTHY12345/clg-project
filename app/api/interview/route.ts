@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@/lib/supabase/server";
 
 interface Message {
@@ -73,8 +73,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5" });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
       const systemPrompt = `You are an expert technical interviewer conducting a mock interview for a ${targetRole} position. Your role is to:
 
@@ -182,15 +181,29 @@ Format your final feedback clearly with headers.`;
         );
       }
 
-      // Start chat session with history (excluding last message)
-      const chat = model.startChat({
-        history: history.slice(0, -1),
+      // Build conversation string from history
+      const conversation = history
+        .map((msg: any) => {
+          const role = msg.role === "model" ? "Assistant" : "User";
+          const text = msg.parts?.[0]?.text ?? "";
+          return `${role}: ${text}`;
+        })
+        .join("\n\n");
+
+      const fullPrompt = `${systemPrompt}
+
+${conversation}
+
+User: ${lastUserMessage}
+
+A:`;
+
+      const result = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: fullPrompt,
       });
 
-      // Send the last user message
-      const result = await chat.sendMessage(lastUserMessage);
-      const response = await result.response;
-      const responseText = response.text();
+      const responseText = result.text?.trim() ?? "";
 
       if (!responseText) {
         return new Response(

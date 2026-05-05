@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@/lib/supabase/server";
 
 const skillAnalysisSchema = z.object({
@@ -121,8 +121,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5" });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
       const prompt = `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
 
@@ -146,9 +145,12 @@ Provide a comprehensive skill gap analysis as a JSON object with these fields:
 
 Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates. Return ONLY valid JSON, no additional text.`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const result = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+      
+      const text = result.text?.trim() ?? "";
 
       if (!text) {
         return new Response(
