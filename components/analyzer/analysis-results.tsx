@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ExternalLink,
 } from "lucide-react";
+import { ReadinessCategory, ProjectRecommendations, ResumeTips, FreeCourses } from "./analysis-enhancements";
 
 interface AnalysisResultsProps {
   analysis: SkillAnalysis;
@@ -75,6 +76,7 @@ export function AnalysisResults({ analysis }: AnalysisResultsProps) {
               {analysis.overallScore}%
             </div>
             <Progress value={analysis.overallScore} className="flex-1" />
+            <ReadinessCategory score={analysis.overallScore} />
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
             {analysis.summary}
@@ -175,6 +177,14 @@ export function AnalysisResults({ analysis }: AnalysisResultsProps) {
               </CardContent>
             </Card>
           </div>
+
+          {/* New Enhancement Sections */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <ProjectRecommendations skillGaps={analysis.skillGaps} />
+            <ResumeTips role="Your Target Role" />
+          </div>
+
+          <FreeCourses skillGaps={analysis.skillGaps} />
         </TabsContent>
 
         {/* Learning Path Tab */}
