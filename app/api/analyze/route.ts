@@ -1,14 +1,11 @@
 import { streamText, Output } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
-// Use custom OpenAI API key if provided, otherwise use AI Gateway
+// Use Gemini model via AI SDK
 function getModel() {
-  if (process.env.OPENAI_API_KEY) {
-    return openai("gpt-4o-mini");
-  }
-  return "openai/gpt-4o-mini";
+  return google("gemini-2.0-flash");
 }
 
 const skillAnalysisSchema = z.object({
