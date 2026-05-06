@@ -25,7 +25,8 @@ export function ResumeUpload({ onTextExtracted, disabled }: ResumeUploadProps) {
     if (file.type === "application/pdf") {
       // Import pdf.js dynamically
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // Use the worker from node_modules instead of CDN
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
 
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
