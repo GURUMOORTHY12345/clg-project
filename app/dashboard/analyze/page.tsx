@@ -51,6 +51,7 @@ export default function AnalyzePage() {
       const decoder = new TextDecoder();
       let buffer = "";
       let partialObject = "";
+      let hasError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -67,6 +68,15 @@ export default function AnalyzePage() {
             if (data === "[DONE]") continue;
             try {
               const parsed = JSON.parse(data);
+              
+              // Check for error in stream
+              if (parsed.type === "error" || parsed.error) {
+                hasError = true;
+                const errorMsg = parsed.error?.message || 
+                               (typeof parsed.error === 'string' ? parsed.error : 'Analysis failed');
+                throw new Error(errorMsg);
+              }
+              
               if (parsed.type === "object" && parsed.object) {
                 partialObject = JSON.stringify(parsed.object);
                 // Try to parse as complete analysis
@@ -79,11 +89,18 @@ export default function AnalyzePage() {
                   // Still streaming
                 }
               }
-            } catch {
-              // Skip invalid JSON
+            } catch (parseErr) {
+              // Skip invalid JSON but check if it's an error
+              if (parseErr instanceof Error && !hasError) {
+                throw parseErr;
+              }
             }
           }
         }
+      }
+
+      if (hasError) {
+        throw new Error("AI analysis failed. Please check your Vercel account settings and ensure you have added a valid payment method to use the AI Gateway.");
       }
 
       // Final parse attempt
@@ -107,7 +124,9 @@ export default function AnalyzePage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      console.error("[v0] Analyze error:", errorMessage);
+      setError(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }
@@ -188,7 +207,17 @@ export default function AnalyzePage() {
               disabled={isAnalyzing}
             />
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <div className="rounded-lg bg-destructive/10 p-4 text-sm">
+                <p className="font-semibold text-destructive">Analysis Error</p>
+                <p className="mt-1 text-destructive/80">{error}</p>
+                {error.toLowerCase().includes("credit") && (
+                  <p className="mt-2 text-xs text-destructive/70">
+                    Please visit your Vercel dashboard to add a payment method for the AI Gateway.
+                  </p>
+                )}
+              </div>
+            )}
 
             <Button
               onClick={handleAnalyze}

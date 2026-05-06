@@ -80,10 +80,11 @@ export async function POST(req: Request) {
     return new Response("Missing resume text or target role", { status: 400 });
   }
 
-  const result = streamText({
-    model: getModel(),
-    output: Output.object({ schema: skillAnalysisSchema }),
-    prompt: `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
+  try {
+    const result = streamText({
+      model: getModel(),
+      output: Output.object({ schema: skillAnalysisSchema }),
+      prompt: `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
 
 RESUME:
 ${resumeText}
@@ -102,10 +103,25 @@ Provide a comprehensive skill gap analysis including:
 9. A brief summary of the analysis
 
 Be specific, actionable, and encouraging. Focus on practical advice for fresh graduates.`,
-  });
+    });
 
-  const response = result.toUIMessageStreamResponse();
-
-  // We'll save the analysis after streaming completes in the client
-  return response;
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    console.error("[v0] Analyze error:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : "Analysis failed";
+    
+    // Return error in SSE format so client can parse it
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", error: { message: errorMessage } })}\n\n`,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      }
+    );
+  }
 }
