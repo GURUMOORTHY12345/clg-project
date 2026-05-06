@@ -1,9 +1,10 @@
 import { streamText, convertToModelMessages, UIMessage } from "ai";
+import { google } from "@ai-sdk/google";
 import { createClient } from "@/lib/supabase/server";
 
-// Use Gemini model via Vercel AI Gateway (free, no API key needed)
+// Use Gemini model with your own API key
 function getModel() {
-  return "google/gemini-2.0-flash";
+  return google("gemini-2.0-flash");
 }
 
 export async function POST(req: Request) {

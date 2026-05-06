@@ -1,10 +1,11 @@
 import { streamText, Output } from "ai";
+import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
-// Use Gemini model via Vercel AI Gateway (free, no API key needed)
+// Use Gemini model with your own API key
 function getModel() {
-  return "google/gemini-2.0-flash";
+  return google("gemini-2.0-flash");
 }
 
 const skillAnalysisSchema = z.object({
