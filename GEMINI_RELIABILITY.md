@@ -21,7 +21,7 @@ This gives Google's service time to recover without overwhelming the API.
 ### 2. Model Fallback
 
 If `gemini-2.5-flash` is unavailable:
-- Automatically fall back to `gemini-1.5-pro`
+- Automatically fall back to `gemini-2.0-flash`
 - Both models support the same feature set
 - Fallback is transparent to users
 
@@ -47,7 +47,7 @@ Frontend now displays helpful messages:
 ### Analyze Route (`/api/analyze`)
 
 ```typescript
-for (const model of ["gemini-2.5-flash", "gemini-1.5-pro"]) {
+for (const model of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       result = await ai.models.generateContent({ model, contents });
@@ -80,7 +80,7 @@ Same logic as analyze route, with additional logging for interview-specific oper
 2. Upload resume and select target role
 3. During service outage:
    - System will retry automatically (you'll see logs)
-   - After 3 attempts, falls back to `gemini-1.5-pro`
+   - After 3 attempts, falls back to `gemini-2.0-flash`
    - If still unavailable, user sees friendly error message
 
 ### Checking Logs
@@ -91,9 +91,9 @@ Watch the console for:
 [v0] gemini-2.5-flash attempt 1 failed: 503 Service Unavailable
 [v0] Attempting gemini-2.5-flash (attempt 2/3)
 [v0] Attempting gemini-2.5-flash (attempt 3/3)
-[v0] gemini-2.5-flash unavailable, trying gemini-1.5-pro
-[v0] Attempting gemini-1.5-pro (attempt 1/3)
-[v0] Successfully got response from gemini-1.5-pro
+[v0] gemini-2.5-flash unavailable, trying gemini-2.0-flash
+[v0] Attempting gemini-2.0-flash (attempt 1/3)
+[v0] Successfully got response from gemini-2.0-flash
 ```
 
 ## Fallback Models
@@ -103,7 +103,7 @@ Watch the console for:
 - Best for real-time features like interviews
 - Preferred when available
 
-### Fallback: `gemini-1.5-pro`
+### Fallback: `gemini-2.0-flash`
 - More stable during high demand
 - Slightly slower but more reliable
 - Supports all required features

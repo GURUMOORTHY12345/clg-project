@@ -201,10 +201,10 @@ A:`;
       let result;
       let lastError: any;
       const maxRetries = 3;
-      
-      // Try gemini-2.5-flash first, fall back to gemini-1.5-pro if unavailable
-      const models = ["gemini-2.5-flash", "gemini-1.5-pro"];
-      
+
+      // Try gemini-2.5-flash first, fall back to gemini-2.0-flash if unavailable
+      const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+
       for (const model of models) {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           try {
@@ -218,7 +218,7 @@ A:`;
           } catch (error: any) {
             lastError = error;
             console.error(`[v0] Interview: ${model} attempt ${attempt + 1} failed:`, error?.message);
-            
+
             // If it's a 503 (service unavailable), try next model or retry
             if (error?.status === 503 && attempt < maxRetries - 1) {
               // Wait before retry with exponential backoff
@@ -233,10 +233,10 @@ A:`;
             }
           }
         }
-        
+
         if (result) break;
       }
-      
+
       if (!result) {
         throw lastError || new Error("Failed to get response from Gemini API");
       }

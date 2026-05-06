@@ -148,10 +148,10 @@ Be specific, actionable, and encouraging. Focus on practical advice for fresh gr
       let result;
       let lastError: any;
       const maxRetries = 3;
-      
-      // Try gemini-2.5-flash first, fall back to gemini-1.5-pro if unavailable
-      const models = ["gemini-2.5-flash", "gemini-1.5-pro"];
-      
+
+      // Try gemini-2.5-flash first, fall back to gemini-2.0-flash if unavailable
+      const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+
       for (const model of models) {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           try {
@@ -165,7 +165,7 @@ Be specific, actionable, and encouraging. Focus on practical advice for fresh gr
           } catch (error: any) {
             lastError = error;
             console.error(`[v0] ${model} attempt ${attempt + 1} failed:`, error?.message);
-            
+
             // If it's a 503 (service unavailable), try next model or retry
             if (error?.status === 503 && attempt < maxRetries - 1) {
               // Wait before retry with exponential backoff
@@ -180,14 +180,14 @@ Be specific, actionable, and encouraging. Focus on practical advice for fresh gr
             }
           }
         }
-        
+
         if (result) break;
       }
-      
+
       if (!result) {
         throw lastError || new Error("Failed to get response from Gemini API");
       }
-      
+
       const text = result.text?.trim() ?? "";
 
       if (!text) {
