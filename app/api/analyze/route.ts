@@ -1,13 +1,10 @@
 import { streamText, Output } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
-// Use custom OpenAI API key if provided, otherwise use AI Gateway
+// Use AI Gateway by default (zero config), or custom OpenAI API key if provided
 function getModel() {
-  if (process.env.OPENAI_API_KEY) {
-    return openai("gpt-4o-mini");
-  }
+  // AI Gateway is recommended and requires no API key setup
   return "openai/gpt-4o-mini";
 }
 
