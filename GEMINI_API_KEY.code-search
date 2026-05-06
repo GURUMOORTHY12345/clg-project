@@ -1,0 +1,59 @@
+# Query: GEMINI_API_KEY
+# Flags: WordMatch
+# ContextLines: 1
+
+14 results - 6 files
+
+API_ERROR_HANDLING.md:
+   71  ```
+   72: **Cause**: GEMINI_API_KEY environment variable not set
+   73  **Action**: Contact server administrator
+
+  206  ```
+  207: **Cause**: GEMINI_API_KEY environment variable not set
+  208  **Action**: Contact server administrator
+
+  326  
+  327: Ensure `GEMINI_API_KEY` is set:
+  328  ```bash
+  329: export GEMINI_API_KEY="AIzaSyBlBTEZdIbB6pJxdVawnjVMht-9u9HrHVg"
+  330  ```
+
+API_FIXES_SUMMARY.md:
+  176  ```bash
+  177: GEMINI_API_KEY=AIzaSyBlBTEZdIbB6pJxdVawnjVMht-9u9HrHVg
+  178  ```
+
+GEMINI_INTEGRATION.md:
+  51  ## Environment Configuration
+  52: - Added `GEMINI_API_KEY` environment variable
+  53  - All Gemini API calls are server-side only (secure)
+
+GEMINI_QUICKSTART.md:
+   3  ## Environment Setup ✅
+   4: The `GEMINI_API_KEY` environment variable has been added. Ensure it's set in your Vercel project settings.
+   5  
+
+  97  **Issue**: API returns error or timeout
+  98: - **Check**: GEMINI_API_KEY is set in environment
+  99  - **Check**: API key is valid and has sufficient quota
+
+app/api/analyze/route.ts:
+  111      // Validate API key
+  112:     if (!process.env.GEMINI_API_KEY) {
+  113:       console.error("GEMINI_API_KEY environment variable not configured");
+  114        return new Response(
+
+  123      try {
+  124:       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  125  
+
+app/api/interview/route.ts:
+  63      // Validate API key
+  64:     if (!process.env.GEMINI_API_KEY) {
+  65:       console.error("GEMINI_API_KEY environment variable not configured");
+  66        return new Response(
+
+  75      try {
+  76:       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  77  
