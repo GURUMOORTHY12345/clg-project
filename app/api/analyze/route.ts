@@ -1,14 +1,16 @@
 import { streamText, Output } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
-// Use custom OpenAI API key if provided, otherwise use AI Gateway
+// Use Vercel AI Gateway by default
+const openai = createOpenAI({
+  apiKey: process.env.AI_GATEWAY_API_KEY || "",
+  baseURL: process.env.AI_GATEWAY_URL || "https://ai-gateway.vercel.app",
+});
+
 function getModel() {
-  if (process.env.OPENAI_API_KEY) {
-    return openai("gpt-4o-mini");
-  }
-  return "openai/gpt-4o-mini";
+  return openai("gpt-4o-mini");
 }
 
 const skillAnalysisSchema = z.object({
