@@ -1,15 +1,9 @@
 import { streamText, convertToModelMessages, UIMessage } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { createClient } from "@/lib/supabase/server";
 
-// Use Vercel AI Gateway by default
-const openai = createOpenAI({
-  apiKey: process.env.AI_GATEWAY_API_KEY || "",
-  baseURL: process.env.AI_GATEWAY_URL || "https://ai-gateway.vercel.app",
-});
-
+// Use Google Gemini through Vercel AI Gateway (free, no credit card needed)
 function getModel() {
-  return openai("gpt-4o-mini");
+  return "google/gemini-2-flash";
 }
 
 export async function POST(req: Request) {
