@@ -1,14 +1,7 @@
-import { streamText, convertToModelMessages, UIMessage } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@/lib/supabase/server";
 
-// Use custom OpenAI API key if provided, otherwise use AI Gateway
-function getModel() {
-  if (process.env.OPENAI_API_KEY) {
-    return openai("gpt-4o-mini");
-  }
-  return "openai/gpt-4o-mini";
-}
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -46,11 +39,78 @@ After about 5-8 questions, wrap up the interview with:
 
 Format your final feedback clearly with headers.`;
 
-  const result = streamText({
-    model: getModel(),
-    system: systemPrompt,
-    messages: await convertToModelMessages(messages as UIMessage[]),
-  });
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  return result.toUIMessageStreamResponse();
+    // Convert messages format to Gemini format
+    const conversationHistory = messages.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+    // Remove the last message temporarily to use as input
+    const userMessage = conversationHistory.pop();
+
+    const chat = model.startChat({
+      history: conversationHistory,
+      generationConfig: {
+        maxOutputTokens: 1024,
+      },
+    });
+
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          const stream = await chat.sendMessageStream(
+            userMessage?.parts[0]?.text || "Hello"
+          );
+
+          for await (const chunk of stream.stream) {
+            if (chunk.candidates?.[0]?.content?.parts?.[0]?.text) {
+              const text = chunk.candidates[0].content.parts[0].text;
+              const data = `data: ${JSON.stringify({ type: "text", text })}\n\n`;
+              controller.enqueue(encoder.encode(data));
+            }
+          }
+
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (error) {
+          console.error("[v0] Interview stream error:", error);
+          const errorMsg = error instanceof Error ? error.message : "Interview failed";
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: "error", error: { message: errorMsg } })}\n\n`
+            )
+          );
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+  } catch (error) {
+    console.error("[v0] Interview error:", error);
+
+    const errorMessage = error instanceof Error ? error.message : "Interview failed";
+
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", error: { message: errorMessage } })}\n\n`,
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      }
+    );
+  }
 }
