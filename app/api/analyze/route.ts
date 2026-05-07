@@ -8,7 +8,7 @@ async function* streamSkillAnalysis(
   resumeText: string,
   targetRole: string
 ): AsyncGenerator<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   const prompt = `You are an expert career counselor and skill gap analyzer. Analyze the following resume for a fresh graduate targeting a ${targetRole} position.
 

@@ -40,7 +40,7 @@ After about 5-8 questions, wrap up the interview with:
 Format your final feedback clearly with headers.`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     // Convert messages format to Gemini format
     const conversationHistory = messages.map((msg: any) => ({

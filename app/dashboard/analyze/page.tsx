@@ -100,7 +100,7 @@ export default function AnalyzePage() {
       }
 
       if (hasError) {
-        throw new Error("AI analysis failed. Please check your Vercel account settings and ensure you have added a valid payment method to use the AI Gateway.");
+        throw new Error("AI analysis failed. Please check your Google API credentials and rate limits.");
       }
 
       // Final parse attempt
@@ -211,9 +211,19 @@ export default function AnalyzePage() {
               <div className="rounded-lg bg-destructive/10 p-4 text-sm">
                 <p className="font-semibold text-destructive">Analysis Error</p>
                 <p className="mt-1 text-destructive/80">{error}</p>
-                {error.toLowerCase().includes("credit") && (
+                {error.toLowerCase().includes("quota") && (
                   <p className="mt-2 text-xs text-destructive/70">
-                    Please visit your Vercel dashboard to add a payment method for the AI Gateway.
+                    You&apos;ve hit your Google API quota. Please wait before trying again or upgrade your Google Cloud plan.
+                  </p>
+                )}
+                {error.toLowerCase().includes("not found") && (
+                  <p className="mt-2 text-xs text-destructive/70">
+                    The selected AI model is not available. Please try again in a moment.
+                  </p>
+                )}
+                {error.toLowerCase().includes("credentials") && (
+                  <p className="mt-2 text-xs text-destructive/70">
+                    Please check your Google API key configuration in the environment variables.
                   </p>
                 )}
               </div>
